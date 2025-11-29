@@ -7,5 +7,6 @@ scikit-learn
 xgboost
 catboost
 flask
+Flask-SQLAlchemy
 
 -e .
