@@ -9,5 +9,6 @@ catboost
 flask
 Flask-SQLAlchemy
 gunicorn
+shap
 
 -e .
