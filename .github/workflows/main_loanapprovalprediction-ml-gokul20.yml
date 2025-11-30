@@ -2,7 +2,7 @@
 # More GitHub Actions for Azure: https://github.com/Azure/actions
 # More info on Python, GitHub Actions, and Azure App Service: https://aka.ms/python-webapps-actions
 
-name: Build and deploy Python app to Azure Web App - loanapprovalprediction
+name: Build and deploy Python app to Azure Web App - loanapprovalprediction-ml-gokul20
 
 on:
   push:
@@ -22,7 +22,7 @@ jobs:
       - name: Set up Python version
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.10'
 
       # 🛠️ Local Build Section (Optional)
       # The following section in your workflow is designed to catch build issues early on the client side, before deployment. This can be helpful for debugging and validation. However, if this step significantly increases deployment time and early detection is not critical for your workflow, you may remove this section to streamline the deployment process.
@@ -63,15 +63,14 @@ jobs:
       - name: Login to Azure
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_C9ECBFF4B91545B5A282BD5AA64F57A6 }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_7B7999E825F8474299B75EE49ACD13D7 }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_E6DCE4371DC64201A5503F2F1DF9856A }}
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_C78B41FBFC2644F681DA48E39F5F4E20 }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_7322F0BC8B6F4A1EBCEFB5B41D4ED22B }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_3CCC89D250AF4045A2185D93A0F44C17 }}
 
-      - name: Deploy to Azure Web App
+      - name: 'Deploy to Azure Web App'
         uses: azure/webapps-deploy@v3
         id: deploy-to-webapp
         with:
-          app-name: 'loanapprovalprediction'
+          app-name: 'loanapprovalprediction-ml-gokul20'
           slot-name: 'Production'
-          package: .
           
