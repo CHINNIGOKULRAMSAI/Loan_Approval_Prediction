@@ -24,13 +24,9 @@ app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USERNAME'] = 'chinnigokul43@gmail.com'
 app.config['MAIL_PASSWORD'] = 'ayuxdlrhgbmehvpw'
 
-@app.route("/ping")
-def ping():
-    return "pong"
-
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return redirect(url_for('login'))
 
 def send_email(subject, recipient, body):
 
