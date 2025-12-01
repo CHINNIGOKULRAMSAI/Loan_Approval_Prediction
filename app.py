@@ -1,64 +1,62 @@
+import os
+import smtplib
+from email.message import EmailMessage
+
 from flask import (
     Flask, render_template, request, flash,
     redirect, url_for, session, jsonify
 )
 from models import db, User
-import os
-import smtplib
-from email.message import EmailMessage
 
 from src.pipeline.predict_pipeline import CustomData, PredictPipeline
 
-application = Flask(__name__)
-app = application
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# ------------ APP & CONFIG ------------
 
-if os.environ.get("WEBSITE_SITE_NAME"):
-    DB_DIR = os.path.join("/home", "data")
-else:
-    DB_DIR = BASE_DIR
+app = Flask(__name__)
 
-os.makedirs(DB_DIR, exist_ok=True)
-DB_PATH = os.path.join(DB_DIR, "app.db")
+# DB: use DATABASE_URL if provided (Render/Postgres), otherwise local SQLite
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
+    "DATABASE_URL", "sqlite:///app.db"
+)
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + DB_PATH
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'change_this_in_prod')
+# Secret key (DO NOT hard-code in production – set in Render env vars)
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-key")
+
+# Mail config – credentials from environment variables
+app.config["MAIL_SERVER"] = "smtp.gmail.com"
+app.config["MAIL_PORT"] = 587
+app.config["MAIL_USE_TLS"] = True
+app.config["MAIL_USERNAME"] = os.environ.get("MAIL_USERNAME")
+app.config["MAIL_PASSWORD"] = os.environ.get("MAIL_PASSWORD")
 
 db.init_app(app)
+
 with app.app_context():
     db.create_all()
 
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-app.config['MAIL_PORT'] = 587
-app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
-app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
 
-@app.route('/')
-def index():
-    return redirect(url_for('login'))
-
+# ------------ HELPERS ------------
 
 def send_email(subject, recipient, body):
-    """Send email, but don't crash the app if email config is missing."""
-    username = app.config.get('MAIL_USERNAME')
-    password = app.config.get('MAIL_PASSWORD')
+    username = app.config.get("MAIL_USERNAME")
+    password = app.config.get("MAIL_PASSWORD")
 
+    # In Render, if you don’t set these env vars, just skip email
     if not username or not password:
         app.logger.warning("MAIL_USERNAME or MAIL_PASSWORD not set; skipping email.")
         return
 
     msg = EmailMessage()
-    msg['Subject'] = subject
-    msg['From'] = username
-    msg['To'] = recipient
+    msg["Subject"] = subject
+    msg["From"] = username
+    msg["To"] = recipient
     msg.set_content(body)
 
     try:
-        with smtplib.SMTP(app.config['MAIL_SERVER'], app.config['MAIL_PORT']) as server:
-            if app.config.get('MAIL_USE_TLS'):
+        with smtplib.SMTP(app.config["MAIL_SERVER"], app.config["MAIL_PORT"]) as server:
+            if app.config.get("MAIL_USE_TLS"):
                 server.starttls()
             server.login(username, password)
             server.send_message(msg)
@@ -66,20 +64,27 @@ def send_email(subject, recipient, body):
         app.logger.error(f"Error sending email: {e}")
 
 
-@app.route('/register', methods=['GET', 'POST'])
+# ------------ ROUTES ------------
+
+@app.route("/")
+def index():
+    return redirect(url_for("login"))
+
+
+@app.route("/register", methods=["GET", "POST"])
 def register():
-    if request.method == 'POST':
-        username = request.form['username'].strip()
-        email = request.form['email'].strip()
-        password = request.form['password']
+    if request.method == "POST":
+        username = request.form["username"].strip()
+        email = request.form["email"].strip()
+        password = request.form["password"]
 
         if User.query.filter_by(username=username).first():
             flash("Username already exists")
-            return redirect(url_for('register'))
+            return redirect(url_for("register"))
 
         if User.query.filter_by(email=email).first():
             flash("Email already exists")
-            return redirect(url_for('register'))
+            return redirect(url_for("register"))
 
         user = User(username=username, email=email)
         user.set_password(password)
@@ -87,129 +92,140 @@ def register():
         db.session.commit()
 
         send_email(
-            subject='Welcome to LoanApp!',
+            subject="Welcome to LoanApp!",
             recipient=user.email,
-            body=f'Hello {user.username},\n\nThank you for registering with LoanApp!'
+            body=f"Hello {user.username},\n\nThank you for registering with LoanApp!",
         )
 
-        flash('Registration successful! Please log in.')
-        return redirect(url_for('login'))
+        flash("Registration successful! Please log in.")
+        return redirect(url_for("login"))
 
-    return render_template('register.html')
+    return render_template("register.html")
 
 
-@app.route('/login', methods=['GET', 'POST'])
+@app.route("/login", methods=["GET", "POST"])
 def login():
-    if request.method == 'POST':
-        username = request.form['username'].strip()
-        password = request.form['password']
+    if request.method == "POST":
+        username = request.form["username"].strip()
+        password = request.form["password"]
 
         user = User.query.filter_by(username=username).first()
 
         if user and user.check_password(password):
-            session['user_id'] = user.id
-            flash('Login successful!')
-            return redirect(url_for('predict_datapoint'))
+            session["user_id"] = user.id
+            flash("Login successful!")
+            return redirect(url_for("predict_datapoint"))
         else:
-            flash('Invalid username or password')
-            return redirect(url_for('login'))
+            flash("Invalid username or password")
+            return redirect(url_for("login"))
 
-    return render_template('login.html')
+    return render_template("login.html")
 
 
-@app.route('/predictdata', methods=['GET', 'POST'])
+@app.route("/predictdata", methods=["GET", "POST"])
 def predict_datapoint():
-    if 'user_id' not in session:
-        flash('Please log in to access this page.')
-        return redirect(url_for('login'))
+    if "user_id" not in session:
+        flash("Please log in to access this page.")
+        return redirect(url_for("login"))
 
-    if request.method == 'GET':
-        return render_template('home.html', results=None, confidence=None, input_summary=None, explanation=None)
+    if request.method == "GET":
+        return render_template(
+            "home.html",
+            results=None,
+            confidence=None,
+            input_summary=None,
+            explanation=None,
+        )
 
     # POST – run prediction
     data = CustomData(
-        loan_id=request.form.get('loan_id'),
-        no_of_dependents=request.form.get('no_of_dependents'),
-        education=request.form.get('education'),
-        self_employed=request.form.get('self_employed'),
-        income_annum=request.form.get('income_annum'),
-        loan_amount=request.form.get('loan_amount'),
-        loan_term=request.form.get('loan_term'),
-        cibil_score=request.form.get('cibil_score'),
-        residential_assets_value=request.form.get('residential_assets_value'),
-        commercial_assets_value=request.form.get('commercial_assets_value'),
-        luxury_assets_value=request.form.get('luxury_assets_value'),
-        bank_asset_value=request.form.get('bank_asset_value'),
+        loan_id=request.form.get("loan_id"),
+        no_of_dependents=request.form.get("no_of_dependents"),
+        education=request.form.get("education"),
+        self_employed=request.form.get("self_employed"),
+        income_annum=request.form.get("income_annum"),
+        loan_amount=request.form.get("loan_amount"),
+        loan_term=request.form.get("loan_term"),
+        cibil_score=request.form.get("cibil_score"),
+        residential_assets_value=request.form.get("residential_assets_value"),
+        commercial_assets_value=request.form.get("commercial_assets_value"),
+        luxury_assets_value=request.form.get("luxury_assets_value"),
+        bank_asset_value=request.form.get("bank_asset_value"),
     )
 
     pred_df = data.get_data_as_dataframe()
     predict_pipeline = PredictPipeline()
     results, explanation = predict_pipeline.predict(pred_df)
 
-    user_id = session.get('user_id')
+    user_id = session.get("user_id")
     user = User.query.get(user_id) if user_id else None
 
     if user:
         result_text = (
             "Congratulations! Your loan is likely to be Approved."
-            if results[0] == 1 else
-            "Sorry, your loan application is likely to be Rejected."
+            if results[0] == 1
+            else "Sorry, your loan application is likely to be Rejected."
         )
         send_email(
-            subject='Your Loan Prediction Result',
+            subject="Your Loan Prediction Result",
             recipient=user.email,
-            body=f'Hello {user.username},\n\n{result_text}'
+            body=f"Hello {user.username},\n\n{result_text}",
         )
 
     return render_template(
-        'home.html',
+        "home.html",
         results=results[0],
         confidence=None,
         input_summary=None,
-        explanation=explanation
+        explanation=explanation,
     )
 
 
-@app.route('/logout', methods=['GET', 'POST'])
+@app.route("/logout", methods=["GET", "POST"])
 def logout():
-    session.pop('user_id', None)
-    flash('Logged out successfully.')
-    return redirect(url_for('login'))
+    session.pop("user_id", None)
+    flash("Logged out successfully.")
+    return redirect(url_for("login"))
 
 
-@app.route('/api/predict', methods=['POST'])
+@app.route("/api/predict", methods=["POST"])
 def api_predict():
     data = request.get_json()
     if not data:
-        return jsonify({'error': 'No input data provided'}), 400
+        return jsonify({"error": "No input data provided"}), 400
 
     try:
         data_obj = CustomData(
-            loan_id=data['loan_id'],
-            no_of_dependents=data['no_of_dependents'],
-            education=data['education'],
-            self_employed=data['self_employed'],
-            income_annum=data['income_annum'],
-            loan_amount=data['loan_amount'],
-            loan_term=data['loan_term'],
-            cibil_score=data['cibil_score'],
-            residential_assets_value=data['residential_assets_value'],
-            commercial_assets_value=data['commercial_assets_value'],
-            luxury_assets_value=data['luxury_assets_value'],
-            bank_asset_value=data['bank_asset_value'],
+            loan_id=data["loan_id"],
+            no_of_dependents=data["no_of_dependents"],
+            education=data["education"],
+            self_employed=data["self_employed"],
+            income_annum=data["income_annum"],
+            loan_amount=data["loan_amount"],
+            loan_term=data["loan_term"],
+            cibil_score=data["cibil_score"],
+            residential_assets_value=data["residential_assets_value"],
+            commercial_assets_value=data["commercial_assets_value"],
+            luxury_assets_value=data["luxury_assets_value"],
+            bank_asset_value=data["bank_asset_value"],
         )
     except KeyError as e:
-        return jsonify({'error': f'Missing input: {str(e)}'}), 400
+        return jsonify({"error": f"Missing input: {str(e)}"}), 400
 
     pred_df = data_obj.get_data_as_dataframe()
     predict_pipeline = PredictPipeline()
     results, explanation = predict_pipeline.predict(pred_df)
 
-    return jsonify({
-        'prediction': int(results[0]),
-        'explanation': explanation
-    })
+    return jsonify(
+        {
+            "prediction": int(results[0]),
+            "explanation": explanation,
+        }
+    )
 
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8000, debug=True)
+# ------------ ENTRYPOINT FOR RENDER ------------
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)

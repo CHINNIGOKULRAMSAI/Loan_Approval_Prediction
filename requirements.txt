@@ -1,17 +1,76 @@
-setuptools
-numpy
-pandas
-matplotlib
-seaborn
-scikit-learn
-xgboost
-catboost
-Flask
-Flask-SQLAlchemy
-gunicorn
-shap
-joblib
-SQLAlchemy
-email_validator
-
-# -e .
+asttokens==3.0.0
+blinker @ file:///C:/miniconda3/conda-bld/blinker_1764332326951/work
+catboost==1.2.8
+click @ file:///C:/miniconda3/conda-bld/click_1764332372183/work
+cloudpickle==3.1.2
+colorama @ file:///home/conda/feedstock_root/build_artifacts/colorama_1733218098505/work
+comm==0.2.3
+contourpy==1.3.3
+cycler==0.12.1
+debugpy==1.8.15
+decorator==5.2.1
+dnspython==2.8.0
+email-validator==2.3.0
+executing==2.2.0
+Flask @ file:///C:/b/abs_28dbmjidmh/croot/flask_1756453142071/work
+Flask-SQLAlchemy==3.1.1
+fonttools==4.60.1
+graphviz==0.21
+greenlet @ file:///C:/miniconda3/conda-bld/greenlet_1757405549674/work
+gunicorn==23.0.0
+idna==3.11
+importlib_metadata @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_importlib-metadata_1747934053/work
+ipykernel @ file:///D:/bld/bld/rattler-build_ipykernel_1761567966/work
+ipython==9.4.0
+ipython_pygments_lexers==1.1.1
+itsdangerous @ file:///C:/Users/dev-admin/buildout/croot/itsdangerous_1732929022589/work
+jedi==0.19.2
+Jinja2 @ file:///C:/b/abs_920kup4e6u/croot/jinja2_1741711580669/work
+joblib==1.5.2
+jupyter_client==8.6.3
+jupyter_core==5.8.1
+kiwisolver==1.4.9
+llvmlite==0.45.1
+-e git+https://github.com/CHINNIGOKULRAMSAI/Loan_Amount_Prediction.git@050d180fb73a5e8ada608d9c1c47bff80f85033a#egg=Loan_Amount_Prediction
+MarkupSafe @ file:///C:/b/abs_a0ma7ge0jc/croot/markupsafe_1738584052792/work
+matplotlib==3.10.7
+matplotlib-inline==0.1.7
+narwhals==2.12.0
+nest-asyncio==1.6.0
+numba==0.62.1
+numpy==2.3.5
+packaging @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_packaging_1745345660/work
+pandas==2.3.3
+parso==0.8.4
+pillow==12.0.0
+platformdirs==4.3.8
+plotly==6.5.0
+prompt_toolkit==3.0.51
+psutil==7.0.0
+pure_eval==0.2.3
+Pygments==2.19.2
+pyparsing==3.2.5
+python-dateutil @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_python-dateutil_1751104122/work
+pytz==2025.2
+pywin32==311
+pyzmq==27.0.0
+scikit-learn==1.7.2
+scipy==1.16.3
+seaborn==0.13.2
+setuptools==80.9.0
+shap==0.50.0
+six @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_six_1753199211/work
+slicer==0.0.8
+SQLAlchemy==2.0.44
+stack-data==0.6.3
+threadpoolctl==3.6.0
+tornado==6.5.1
+tqdm==4.67.1
+traitlets==5.14.3
+typing_extensions @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_typing_extensions_1756220668/work
+tzdata==2025.2
+wcwidth==0.2.13
+Werkzeug @ file:///C:/b/abs_c7bupijx2_/croot/werkzeug_1737448709012/work
+wheel==0.45.1
+xgboost==3.1.2
+zipp @ file:///home/conda/feedstock_root/build_artifacts/zipp_1749421620841/work
