@@ -2,38 +2,106 @@ import os
 import sys
 import pandas as pd
 import numpy as np
-import shap
 
 from src.exception import CustomException
 from src.logger import logging
 from src.utils import load_object
 
+# ---------- Paths & Caching ----------
+
+MODEL_PATH = os.path.join("artifacts", "model.pkl")
+PREPROCESSOR_PATH = os.path.join("artifacts", "preprocessor.pkl")
+
+_model = None
+_preprocessor = None
+
+
+def get_model():
+    """Load model once and cache it."""
+    global _model
+    if _model is None:
+        try:
+            logging.info(f"Loading model from {MODEL_PATH}")
+            _model = load_object(MODEL_PATH)
+        except Exception as e:
+            raise CustomException(e, sys)
+    return _model
+
+
+def get_preprocessor():
+    """Load preprocessor once and cache it."""
+    global _preprocessor
+    if _preprocessor is None:
+        try:
+            logging.info(f"Loading preprocessor from {PREPROCESSOR_PATH}")
+            _preprocessor = load_object(PREPROCESSOR_PATH)
+        except Exception as e:
+            raise CustomException(e, sys)
+    return _preprocessor
+
+
+# ---------- Prediction Pipeline ----------
+
 class PredictPipeline:
     def __init__(self):
-        self.model = (load_object(os.path.join("artifacts","model.pkl")))
-        self.preprocessor = (load_object(os.path.join("artifacts","preprocessor.pkl")))
-    def predict(self,features):
+        # Heavy objects are loaded lazily via helpers above
+        pass
+
+    def predict(self, features: pd.DataFrame):
         try:
-            data_scaled = self.preprocessor.transform(features)
-            pred = self.model.predict(data_scaled)
+            preprocessor = get_preprocessor()
+            model = get_model()
 
-            explainer = shap.TreeExplainer(self.model)
-            shap_values = explainer.shap_values(data_scaled)
+            # Transform input
+            data_scaled = preprocessor.transform(features)
 
+            # Model prediction
+            pred = model.predict(data_scaled)
+
+            # Lightweight "explanation" using feature importances if available
             feature_names = features.columns.tolist()
 
-            explanation = sorted(
-                zip(feature_names,shap_values[0]),
-                key= lambda x: abs(x[1]),
-                reverse=True,
-            )
+            importances = None
+            try:
+                # For tree-based models (CatBoost, RandomForest, etc.)
+                importances = getattr(model, "feature_importances_", None)
+            except Exception:
+                importances = None
+
+            if importances is not None and len(importances) == len(feature_names):
+                explanation = sorted(
+                    zip(feature_names, importances),
+                    key=lambda x: abs(x[1]),
+                    reverse=True,
+                )
+            else:
+                # Fallback: zero importance, just to keep template logic simple
+                explanation = [(name, 0.0) for name in feature_names]
 
             return pred, explanation
+
         except Exception as e:
-            raise CustomException(e,sys)
-        
+            raise CustomException(e, sys)
+
+
+# ---------- Input Data Wrapper ----------
+
 class CustomData:
-    def __init__(self, loan_id, no_of_dependents, education, self_employed, income_annum, loan_amount, loan_term, cibil_score, residential_assets_value, commercial_assets_value, luxury_assets_value, bank_asset_value):
+    def __init__(
+        self,
+        loan_id,
+        no_of_dependents,
+        education,
+        self_employed,
+        income_annum,
+        loan_amount,
+        loan_term,
+        cibil_score,
+        residential_assets_value,
+        commercial_assets_value,
+        luxury_assets_value,
+        bank_asset_value,
+    ):
         self.loan_id = loan_id
         self.no_of_dependents = int(no_of_dependents)
         self.education = education
@@ -60,6 +128,6 @@ class CustomData:
             "residential_assets_value": [self.residential_assets_value],
             "commercial_assets_value": [self.commercial_assets_value],
             "luxury_assets_value": [self.luxury_assets_value],
-            "bank_asset_value": [self.bank_asset_value]
+            "bank_asset_value": [self.bank_asset_value],
         }
         return pd.DataFrame(data)
