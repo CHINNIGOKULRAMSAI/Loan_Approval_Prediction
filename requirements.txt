@@ -1,14 +1,8 @@
 Flask
 Flask-SQLAlchemy
 gunicorn
-pandas
 numpy
+pandas
 scikit-learn
 joblib
 catboost
-xgboost
-matplotlib
-seaborn
-shap
-email-validator
-email.message
