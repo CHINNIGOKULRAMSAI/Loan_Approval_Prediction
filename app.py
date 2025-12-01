@@ -14,7 +14,15 @@ app = application
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(BASE_DIR, 'app.db')
+if os.environ.get("WEBSITE_SITE_NAME"):
+    DB_DIR = os.path.join("/home", "data")
+else:
+    DB_DIR = BASE_DIR
+
+os.makedirs(DB_DIR, exist_ok=True)
+DB_PATH = os.path.join(DB_DIR, "app.db")
+
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + DB_PATH
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'change_this_in_prod')
 
@@ -27,7 +35,6 @@ app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
-
 
 @app.route('/')
 def index():
