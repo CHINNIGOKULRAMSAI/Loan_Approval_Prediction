@@ -1,21 +1,26 @@
-from flask import Flask, render_template, request, flash, redirect, url_for, session, jsonify
-from models import db,User
+from flask import (
+    Flask, render_template, request, flash,
+    redirect, url_for, session, jsonify
+)
+from models import db, User
 import os
-import sys
-import pandas as pd
-import numpy as np
-
 import smtplib
 from email.message import EmailMessage
 
-from src.pipeline.predict_pipeline import CustomData,PredictPipeline
+from src.pipeline.predict_pipeline import CustomData, PredictPipeline
 
 application = Flask(__name__)
 app = application
 
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
-app.config['SECRET_KEY'] = 'your_secret_key_here'
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(BASE_DIR, 'app.db')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'change_this_in_prod')
+
 db.init_app(app)
+with app.app_context():
+    db.create_all()
 
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
@@ -23,55 +28,77 @@ app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
 
+
 @app.route('/')
 def index():
     return redirect(url_for('login'))
 
+
 def send_email(subject, recipient, body):
+    """Send email, but don't crash the app if email config is missing."""
+    username = app.config.get('MAIL_USERNAME')
+    password = app.config.get('MAIL_PASSWORD')
+
+    if not username or not password:
+        app.logger.warning("MAIL_USERNAME or MAIL_PASSWORD not set; skipping email.")
+        return
 
     msg = EmailMessage()
     msg['Subject'] = subject
-    msg['From'] = app.config['MAIL_USERNAME']
+    msg['From'] = username
     msg['To'] = recipient
     msg.set_content(body)
 
-    with smtplib.SMTP(app.config['MAIL_SERVER'], app.config['MAIL_PORT']) as server:
-        if app.config.get('MAIL_USE_TLS'):
-            server.starttls()
-        server.login(app.config['MAIL_USERNAME'], app.config['MAIL_PASSWORD'])
-        server.send_message(msg)
+    try:
+        with smtplib.SMTP(app.config['MAIL_SERVER'], app.config['MAIL_PORT']) as server:
+            if app.config.get('MAIL_USE_TLS'):
+                server.starttls()
+            server.login(username, password)
+            server.send_message(msg)
+    except Exception as e:
+        app.logger.error(f"Error sending email: {e}")
 
-@app.route('/register', methods= ['GET','POST'])
+
+@app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
-        username = request.form['username']
-        email = request.form['email']
+        username = request.form['username'].strip()
+        email = request.form['email'].strip()
         password = request.form['password']
+
         if User.query.filter_by(username=username).first():
             flash("Username already exists")
             return redirect(url_for('register'))
+
         if User.query.filter_by(email=email).first():
             flash("Email already exists")
             return redirect(url_for('register'))
+
         user = User(username=username, email=email)
         user.set_password(password)
         db.session.add(user)
         db.session.commit()
+
         send_email(
             subject='Welcome to LoanApp!',
             recipient=user.email,
             body=f'Hello {user.username},\n\nThank you for registering with LoanApp!'
         )
+
         flash('Registration successful! Please log in.')
         return redirect(url_for('login'))
+
     return render_template('register.html')
+
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form['username']
+        username = request.form['username'].strip()
         password = request.form['password']
+
         user = User.query.filter_by(username=username).first()
+
         if user and user.check_password(password):
             session['user_id'] = user.id
             flash('Login successful!')
@@ -79,54 +106,66 @@ def login():
         else:
             flash('Invalid username or password')
             return redirect(url_for('login'))
+
     return render_template('login.html')
 
-@app.route('/predictdata',methods = ['GET','POST'])
+
+@app.route('/predictdata', methods=['GET', 'POST'])
 def predict_datapoint():
     if 'user_id' not in session:
         flash('Please log in to access this page.')
         return redirect(url_for('login'))
-    
+
     if request.method == 'GET':
-        return render_template('home.html', confidence=None, input_summary=None)
-    else:
-        data = CustomData(
-            loan_id = request.form.get('loan_id'),
-            no_of_dependents = request.form.get('no_of_dependents'),
-            education = request.form.get('education'),
-            self_employed = request.form.get('self_employed'),
-            income_annum = request.form.get('income_annum'),
-            loan_amount = request.form.get('loan_amount'),
-            loan_term = request.form.get('loan_term'),
-            cibil_score = request.form.get('cibil_score'),
-            residential_assets_value = request.form.get('residential_assets_value'),
-            commercial_assets_value = request.form.get('commercial_assets_value'),
-            luxury_assets_value = request.form.get('luxury_assets_value'),
-            bank_asset_value = request.form.get('bank_asset_value'))
-        
-        pred_df = data.get_data_as_dataframe()
-        predict_pipeline = PredictPipeline()
-        results, explanation = predict_pipeline.predict(pred_df)
+        return render_template('home.html', results=None, confidence=None, input_summary=None, explanation=None)
 
-        user_id = session.get('user_id')
-        user = User.query.get(user_id) if user_id else None
-        if user:
-            result_text = (
-                "Congratulations! Your loan is likely to be Approved."
-                if results[0] == 1 else
-                "Sorry, your loan application is likely to be Rejected."
-            )
-            send_email(
-                subject='Your Loan Prediction Result',
-                recipient=user.email,
-                body=f'Hello {user.username},\n\n{result_text}'
-            )
+    # POST – run prediction
+    data = CustomData(
+        loan_id=request.form.get('loan_id'),
+        no_of_dependents=request.form.get('no_of_dependents'),
+        education=request.form.get('education'),
+        self_employed=request.form.get('self_employed'),
+        income_annum=request.form.get('income_annum'),
+        loan_amount=request.form.get('loan_amount'),
+        loan_term=request.form.get('loan_term'),
+        cibil_score=request.form.get('cibil_score'),
+        residential_assets_value=request.form.get('residential_assets_value'),
+        commercial_assets_value=request.form.get('commercial_assets_value'),
+        luxury_assets_value=request.form.get('luxury_assets_value'),
+        bank_asset_value=request.form.get('bank_asset_value'),
+    )
 
-        return render_template('home.html', results=results[0], confidence=None, input_summary=None, explanation=explanation)
+    pred_df = data.get_data_as_dataframe()
+    predict_pipeline = PredictPipeline()
+    results, explanation = predict_pipeline.predict(pred_df)
 
-@app.route('/logout',methods = ["GET","POST"])
+    user_id = session.get('user_id')
+    user = User.query.get(user_id) if user_id else None
+
+    if user:
+        result_text = (
+            "Congratulations! Your loan is likely to be Approved."
+            if results[0] == 1 else
+            "Sorry, your loan application is likely to be Rejected."
+        )
+        send_email(
+            subject='Your Loan Prediction Result',
+            recipient=user.email,
+            body=f'Hello {user.username},\n\n{result_text}'
+        )
+
+    return render_template(
+        'home.html',
+        results=results[0],
+        confidence=None,
+        input_summary=None,
+        explanation=explanation
+    )
+
+
+@app.route('/logout', methods=['GET', 'POST'])
 def logout():
-    session.pop('user_id',None)
+    session.pop('user_id', None)
     flash('Logged out successfully.')
     return redirect(url_for('login'))
 
@@ -138,44 +177,32 @@ def api_predict():
         return jsonify({'error': 'No input data provided'}), 400
 
     try:
-        loan_id = data['loan_id']
-        no_of_dependents = data['no_of_dependents']
-        education = data['education']
-        self_employed = data['self_employed']
-        income_annum = data['income_annum']
-        loan_amount = data['loan_amount']
-        loan_term = data['loan_term']
-        cibil_score = data['cibil_score']
-        residential_assets_value = data['residential_assets_value']
-        commercial_assets_value = data['commercial_assets_value']
-        luxury_assets_value = data['luxury_assets_value']
-        bank_asset_value = data['bank_asset_value']
+        data_obj = CustomData(
+            loan_id=data['loan_id'],
+            no_of_dependents=data['no_of_dependents'],
+            education=data['education'],
+            self_employed=data['self_employed'],
+            income_annum=data['income_annum'],
+            loan_amount=data['loan_amount'],
+            loan_term=data['loan_term'],
+            cibil_score=data['cibil_score'],
+            residential_assets_value=data['residential_assets_value'],
+            commercial_assets_value=data['commercial_assets_value'],
+            luxury_assets_value=data['luxury_assets_value'],
+            bank_asset_value=data['bank_asset_value'],
+        )
     except KeyError as e:
         return jsonify({'error': f'Missing input: {str(e)}'}), 400
 
-    data_obj = CustomData(
-        loan_id=loan_id,
-        no_of_dependents=no_of_dependents,
-        education=education,
-        self_employed=self_employed,
-        income_annum=income_annum,
-        loan_amount=loan_amount,
-        loan_term=loan_term,
-        cibil_score=cibil_score,
-        residential_assets_value=residential_assets_value,
-        commercial_assets_value=commercial_assets_value,
-        luxury_assets_value=luxury_assets_value,
-        bank_asset_value=bank_asset_value
-    )
     pred_df = data_obj.get_data_as_dataframe()
-
     predict_pipeline = PredictPipeline()
     results, explanation = predict_pipeline.predict(pred_df)
 
     return jsonify({
-        'prediction': int(results[0]),  # 1 or 0
+        'prediction': int(results[0]),
         'explanation': explanation
     })
 
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0',debug=True)
+    app.run(host='0.0.0.0', port=8000, debug=True)
