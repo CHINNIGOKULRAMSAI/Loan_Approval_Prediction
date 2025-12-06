@@ -8,76 +8,22 @@ from src.logger import logging
 from src.utils import load_object
 
 
-MODEL_PATH = os.path.join("artifacts", "model.pkl")
-PREPROCESSOR_PATH = os.path.join("artifacts", "preprocessor.pkl")
-
-_model = None
-_preprocessor = None
-
-
-def get_model():
-    """Load model once and cache it."""
-    global _model
-    if _model is None:
-        try:
-            logging.info(f"Loading model from {MODEL_PATH}")
-            _model = load_object(MODEL_PATH)
-        except Exception as e:
-            raise CustomException(e, sys)
-    return _model
-
-
-def get_preprocessor():
-    """Load preprocessor once and cache it."""
-    global _preprocessor
-    if _preprocessor is None:
-        try:
-            logging.info(f"Loading preprocessor from {PREPROCESSOR_PATH}")
-            _preprocessor = load_object(PREPROCESSOR_PATH)
-        except Exception as e:
-            raise CustomException(e, sys)
-    return _preprocessor
-
-
-# Prediction Pipeline
-
 class PredictPipeline:
     def __init__(self):
-        # Heavy objects are loaded lazily via helpers above
         pass
 
     def predict(self, features: pd.DataFrame):
         try:
-            preprocessor = get_preprocessor()
-            model = get_model()
-
-            # Transform input
+            model_path = os.path.join("artifacts","model.pkl")
+            preprocessor_path = os.path.join("artifacts","preprocessor.pkl")
+            print("Before Loading")
+            model = load_object(file_path=model_path)
+            preprocessor = load_object(file_path=preprocessor_path)
+            print("After Loading")
             data_scaled = preprocessor.transform(features)
+            preds = model.predict(data_scaled)
 
-            # Model prediction
-            pred = model.predict(data_scaled)
-
-            # Lightweight "explanation" using feature importances if available
-            feature_names = features.columns.tolist()
-
-            importances = None
-            try:
-                # For tree-based models (CatBoost, RandomForest, etc.)
-                importances = getattr(model, "feature_importances_", None)
-            except Exception:
-                importances = None
-
-            if importances is not None and len(importances) == len(feature_names):
-                explanation = sorted(
-                    zip(feature_names, importances),
-                    key=lambda x: abs(x[1]),
-                    reverse=True,
-                )
-            else:
-                # Fallback: zero importance, just to keep template logic simple
-                explanation = [(name, 0.0) for name in feature_names]
-
-            return pred, explanation
+            return preds
 
         except Exception as e:
             raise CustomException(e, sys)

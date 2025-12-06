@@ -51,8 +51,6 @@ def send_email(subject, recipient, body):
         app.logger.error(f"Error sending email: {e}")
 
 
-# ------------ ROUTES ------------
-
 @app.route("/")
 def index():
     return redirect(url_for("login"))
@@ -141,30 +139,37 @@ def predict_datapoint():
 
     pred_df = data.get_data_as_dataframe()
     predict_pipeline = PredictPipeline()
-    results, explanation = predict_pipeline.predict(pred_df)
+    results = predict_pipeline.predict(pred_df)
 
     user_id = session.get("user_id")
     user = User.query.get(user_id) if user_id else None
 
+    # Build result details for display
+    prediction = int(results[0])
+    result_text = (
+        "Approved" if prediction == 1 else "Rejected"
+    )
+
+    # Email the user about their result
     if user:
-        result_text = (
-            "Congratulations! Your loan is likely to be Approved."
-            if results[0] == 1
-            else "Sorry, your loan application is likely to be Rejected."
-        )
         send_email(
             subject="Your Loan Prediction Result",
             recipient=user.email,
-            body=f"Hello {user.username},\n\n{result_text}",
+            body=f"Hello {user.username},\n\nYour loan application is likely to be {result_text}.",
         )
 
-    return render_template(
-        "home.html",
-        results=results[0],
-        confidence=None,
-        input_summary=None,
-        explanation=explanation,
-    )
+    # Persist minimal context to session and redirect to result page
+    session["last_result"] = {
+        "status": result_text,
+        "raw": prediction,
+        "loan_id": request.form.get("loan_id"),
+        "income_annum": request.form.get("income_annum"),
+        "loan_amount": request.form.get("loan_amount"),
+        "loan_term": request.form.get("loan_term"),
+        "cibil_score": request.form.get("cibil_score"),
+    }
+
+    return redirect(url_for("result"))
 
 
 @app.route("/logout", methods=["GET", "POST"])
@@ -208,6 +213,20 @@ def api_predict():
             "explanation": explanation,
         }
     )
+
+
+@app.route("/result", methods=["GET"])
+def result():
+    if "user_id" not in session:
+        flash("Please log in to access this page.")
+        return redirect(url_for("login"))
+
+    data = session.get("last_result")
+    if not data:
+        flash("No recent prediction found. Please submit the form.")
+        return redirect(url_for("predict_datapoint"))
+
+    return render_template("result.html", data=data)
 
 
 if __name__ == "__main__":
